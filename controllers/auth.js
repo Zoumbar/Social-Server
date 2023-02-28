@@ -2,52 +2,52 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-// Req = request body and res = response body
-// async function for database relation with backend
+/* REGISTER USER */
 export const register = async (req, res) => {
   try {
     const {
-      firstname,
-      lastname,
+      firstName,
+      lastName,
       email,
       password,
-      picturepath,
-      firends,
+      picturePath,
+      friends,
       location,
       occupation,
     } = req.body;
-    // from the frontend we need to send these parameters to the backend once it will be available
 
-    const salt = await bcrypt.genSalt(); // Encrypting the password
+    const salt = await bcrypt.genSalt();
     const passwordHash = await bcrypt.hash(password, salt);
+
     const newUser = new User({
-      firstname,
-      lastname,
+      firstName,
+      lastName,
       email,
       password: passwordHash,
-      picturepath,
-      firends,
+      picturePath,
+      friends,
       location,
       occupation,
-      viewedProfile: Math.floor(Math.random() * 1000),
+      viewedProfile: Math.floor(Math.random() * 10000),
       impressions: Math.floor(Math.random() * 10000),
     });
-    const savedUser = await newUser.save(); // saving the new user to the database
+    const savedUser = await newUser.save();
     res.status(201).json(savedUser);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-/* LOGIN */
+/* LOGGING IN */
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body.email;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: "User not found" });
+    const { email, password } = req.body;
+    const user = await User.findOne({ email: email });
+    if (!user) return res.status(400).json({ msg: "User does not exist. " });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ error: "Invalid password" });
+    if (!isMatch) return res.status(400).json({ msg: "Invalid credentials. " });
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
     delete user.password;
     res.status(200).json({ token, user });
