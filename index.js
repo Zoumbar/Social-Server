@@ -17,6 +17,7 @@ import { verifyToken } from "./middleware/auth.js";
 import User from "./models/User.js";
 import Post from "./models/Post.js";
 import { users, posts } from "./data/index.js";
+import { Storage } from "@google-cloud/storage";
 
 /* CONFIGURATIONS */
 const __filename = fileURLToPath(import.meta.url);
@@ -24,7 +25,14 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 const app = express();
 app.use(express.json());
-app.use(helmet());
+app.use(
+  helmet.contentSecurityPolicy({
+    useDefaults: true,
+    directives: {
+      "img-src": ["'self'", "https: data:"],
+    },
+  })
+);
 app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 app.use(morgan("common"));
 app.use(bodyParser.json({ limit: "30mb", extended: true }));
@@ -34,7 +42,7 @@ app.use("/assets", express.static(path.join(__dirname, "public/assets")));
 mongoose.set("strictQuery", true);
 
 /* FILE STORAGE */
-const storage = multer.diskStorage({
+const storageMulter = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, "public/assets");
   },
@@ -42,7 +50,54 @@ const storage = multer.diskStorage({
     cb(null, file.originalname);
   },
 });
-const upload = multer({ storage });
+const upload = multer({ storageMulter });
+
+const multerr = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 1024 * 1024 * 5,
+  },
+});
+
+let projectId = "fair-veld-333009";
+let keyFilename = "mykey.json";
+const storage = new Storage({
+  projectId,
+  keyFilename,
+});
+const bucket = storage.bucket("sociopedia");
+// Gets all files in the defined bucket
+app.get("/upload", async (req, res) => {
+  try {
+    const [files] = await bucket.getFiles();
+    res.send([files]);
+    console.log("Success");
+  } catch (error) {
+    res.send("Error:" + error);
+  }
+});
+// Streams file upload to Google Storage
+app.post("/upload", multerr.single("imgfile"), (req, res) => {
+  console.log("Made it /upload");
+  try {
+    if (req.file) {
+      console.log("File found, trying to upload...");
+      const blob = bucket.file(req.file.originalname);
+      const blobStream = blob.createWriteStream();
+
+      blobStream.on("finish", () => {
+        res.status(200).send("Success");
+        console.log("Success");
+      });
+      blobStream.end(req.file.buffer);
+    } else throw "error with img";
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+app.get("/", (req, res) => {
+  res.sendFile("./index.html");
+});
 
 /* ROUTES WITH FILES */
 app.post("/auth/register", upload.single("picture"), register);
