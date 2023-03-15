@@ -17,6 +17,7 @@ import { verifyToken } from "./middleware/auth.js";
 import User from "./models/User.js";
 import Post from "./models/Post.js";
 import { users, posts } from "./data/index.js";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 /* CONFIGURATIONS */
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +33,43 @@ app.use(bodyParser.urlencoded({ limit: "30mb", extended: true }));
 app.use(cors());
 app.use("/assets", express.static(path.join(__dirname, "public/assets")));
 mongoose.set("strictQuery", true);
+
+// File storage aws s3
+async function uploadToS3(path, originalFilename, mimetype) {
+  const client = new S3Client({
+    region: "eu-west-3",
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+    },
+  });
+  const parts = originalFilename.split(".");
+  const ext = parts[parts.length - 1];
+  const newFilename = Date.now() + "." + ext;
+  const data = await client.send(
+    new PutObjectCommand({
+      Bucket: "sociopedia-este",
+      Body: fs.readFileSync(path),
+      Key: newFilename,
+      ContentType: mimetype,
+      ACL: "public-read",
+    })
+  );
+  console.log({ data });
+}
+const photosMiddleware = multer({ dest: "/tmp" });
+app.post(
+  "/upload",
+  photosMiddleware.array("picture", 100),
+  async (req, res) => {
+    const uploadedFiles = [];
+    for (let i = 0; i < req.files.length; i++) {
+      const { path, originalname, mimetype } = req.files[i];
+      await uploadToS3(path, originalname, mimetype);
+    }
+    res.json(uploadedFiles);
+  }
+);
 
 /* FILE STORAGE */
 const storage = multer.diskStorage({
